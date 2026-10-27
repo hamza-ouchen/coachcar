@@ -4,7 +4,7 @@ Plateforme locale d'orientation professionnelle avec trois agents LangGraph, rec
 
 ## CI et livraison automatisee
 
-La pipeline `.github/workflows/ci.yml` verifie les dependances, la syntaxe Python/JavaScript et les tests sans appel API. Si les controles passent, elle cree une archive telechargeable du code et du graphe LangGraph. Elle s'activera apres l'envoi du projet sur GitHub ; aucun deploiement d'hebergement n'est configure.
+La pipeline `.github/workflows/ci.yml` verifie les dependances, la syntaxe Python/JavaScript et les tests sans appel API. Si les controles passent, elle cree une archive telechargeable du code et du graphe LangGraph. Elle est reliee au depot [hamza-ouchen/coachcar](https://github.com/hamza-ouchen/coachcar) et se declenche a chaque push ou pull request. Les executions sont visibles dans [GitHub Actions](https://github.com/hamza-ouchen/coachcar/actions). Aucun deploiement d'hebergement n'est configure.
 
 Pour executer les memes controles localement sans coder : double-cliquer **VERIFIER.cmd**. L'archive est creee dans `ci-output/Cap-Avenir-CI.zip`. Le fonctionnement de l'application et ses donnees restent inchanges. Le guide **livrables/CI-CD.md** explique les etapes et leur presentation au professeur.
 

@@ -40,9 +40,9 @@ La cle, la base SQLite, l'environnement virtuel et les anciens exports d'analyse
 
 ## Activation sur GitHub
 
-Au moment de cet ajout, le dossier local n'est pas encore un depot Git. Aucun run GitHub n'a donc ete execute ou valide a distance.
+Le projet est relie au depot [hamza-ouchen/coachcar](https://github.com/hamza-ouchen/coachcar), avec la branche locale `main` suivant `origin/main`. L'adresse SSH est `git@github.com:hamza-ouchen/coachcar.git`. Les executions sont accessibles dans [GitHub Actions](https://github.com/hamza-ouchen/coachcar/actions).
 
-1. Relier les sources a un depot GitHub puis envoyer les fichiers, en respectant .gitignore.
+1. Envoyer une modification dans le depot : le push declenche automatiquement la pipeline. Les exclusions de .gitignore conservent la cle et les donnees locales sur l'ordinateur.
 2. Ouvrir l'onglet Actions du depot.
 3. Choisir **Cap Avenir - Tests et livraison**.
 4. Ouvrir l'execution lancee par le push, ou cliquer Run workflow pour un lancement manuel.
