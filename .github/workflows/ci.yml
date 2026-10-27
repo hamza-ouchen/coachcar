@@ -1,0 +1,75 @@
+name: Cap Avenir - Tests et livraison
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHONUTF8: "1"
+  # Cette pipeline utilise uniquement des reponses simulees, sans secret API.
+  OPENROUTER_API_KEY: ""
+
+jobs:
+  tests:
+    name: Verifier le fonctionnement
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Recuperer le projet
+        uses: actions/checkout@v7
+
+      - name: Installer Python 3.12
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Installer les dependances
+        run: python -m pip install -r requirements.txt
+
+      - name: Verifier les dependances
+        run: python -m pip check
+
+      - name: Verifier la syntaxe Python
+        run: python -m compileall -q app.py provider.py workflow.py storage.py launch.py setup_secret.py scripts tests
+
+      - name: Verifier la syntaxe JavaScript
+        run: node --check static/app.js
+
+      - name: Tester le workflow agentique et la livraison sans appel API
+        run: python -m unittest discover -s tests -v
+
+  delivery:
+    name: Preparer la version livrable
+    needs: tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Recuperer la version testee
+        uses: actions/checkout@v7
+
+      - name: Installer Python 3.12
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Installer les dependances
+        run: python -m pip install -r requirements.txt
+
+      - name: Creer l'archive sans base locale ni cle API
+        run: python scripts/package_ci.py
+
+      - name: Rendre l'archive telechargeable
+        uses: actions/upload-artifact@v7
+        with:
+          name: cap-avenir-${{ github.sha }}
+          path: |
+            ci-output/Cap-Avenir-CI.zip
+            ci-output/manifest.json
+          if-no-files-found: error
+          retention-days: 14

@@ -1,0 +1,12 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+data/
+artifacts/
+node_modules/
+playwright-report/
+ci-output/
+livrables/*.zip
+livrables/executions.csv
+livrables/exemple-analyse-reelle.json
