@@ -14,6 +14,7 @@ ROOT_FILES = (
     "check_provider.py", "live_check.py", "LANCER.cmd", "VERIFIER.cmd",
     "requirements.txt", ".env.example", ".gitignore", "README.md", "PLAN.md",
     "operations.py", "release_registry.py", "VERSION", "Dockerfile", ".dockerignore", "compose.yaml",
+    "database.py", "access.py", "container_start.py", "render.yaml",
     "INTEGRATION-EXPLOITATION.md", "DOCKER.cmd", "DEPLOYER.cmd", "ROLLBACK.cmd", "EXERCICE.cmd",
 )
 

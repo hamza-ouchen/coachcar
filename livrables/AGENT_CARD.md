@@ -1,6 +1,8 @@
 # Agent Card — Cap Avenir
 
-Version fonctionnelle : 1.1.1. Projet pédagogique local. Responsable : propriétaire du dépôt hamza-ouchen/coachcar. Dernière mise à jour : 28 octobre 2026.
+Version fonctionnelle : 1.2.0. Projet pédagogique local ou Render. Responsable : propriétaire du dépôt hamza-ouchen/coachcar. Dernière mise à jour : 28 octobre 2026.
+
+Mode cloud : PostgreSQL conserve profils, événements, pause et registre des versions entre les déploiements. Un mot de passe protège les pages, API et exports ; seul le contrôle de santé est public. Le premier déploiement Render reste à réaliser et vérifier dans le compte du propriétaire. La publication approuvée 1.1.1 mentionnée plus bas correspond à la version locale précédente.
 
 ## Identité, rôles et interfaces
 

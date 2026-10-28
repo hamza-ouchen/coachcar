@@ -4,3 +4,4 @@ langgraph==1.2.17
 openai==2.54.0
 python-dotenv==1.2.4
 httpx==0.28.1
+psycopg[binary]==3.3.6

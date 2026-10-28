@@ -19,6 +19,8 @@ import storage
 import workflow
 import operations
 import release_registry
+import access
+import database
 
 ROOT = Path(__file__).resolve().parent
 TASKS = set()
@@ -27,7 +29,9 @@ RUN_TASKS = {}
 
 @asynccontextmanager
 async def lifespan(app):
+    access.validate_configuration()
     storage.init_db()
+    operations.record_render_deployment()
     yield
     for task in list(TASKS):
         task.cancel()
@@ -36,6 +40,7 @@ async def lifespan(app):
 
 
 app = FastAPI(title="Cap Avenir", description="Orientation professionnelle multi-agents et observabilité", lifespan=lifespan)
+app.middleware("http")(access.protect)
 
 
 class Profile(BaseModel):
@@ -180,6 +185,19 @@ async def backup_database(body: Operator):
     from datetime import datetime, timezone
     if any(r["status"] == "running" for r in storage.list_runs()):
         raise HTTPException(409, "Terminez ou interrompez les missions avant la sauvegarde.")
+    if database.postgres_url():
+        backup_id = str(uuid4())
+        payload = {"format": "cap-avenir-application-json", "version": operations.version(),
+                   "created_at": storage.now(), "runs": storage.list_runs(),
+                   "operations": operations.snapshot()}
+        for run in payload["runs"]:
+            run["events"] = storage.events(run["id"])
+        with storage.connect() as conn:
+            conn.execute("INSERT INTO application_backups(id,created_at,payload) VALUES(?,?,?)",
+                         (backup_id, storage.now(), json.dumps(payload, ensure_ascii=False)))
+            conn.execute("DELETE FROM application_backups WHERE id NOT IN (SELECT id FROM application_backups ORDER BY created_at DESC LIMIT 3)")
+        operations.audit("database_backup", body.actor, {"id": backup_id, "format": "application-json"})
+        return {"id": backup_id, "format": "application-json", "download": "/api/ops/backups/" + backup_id}
     folder = storage.DB_PATH.parent / "backups"
     folder.mkdir(parents=True, exist_ok=True)
     filename = "cap-avenir-" + datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f") + ".db"
@@ -191,6 +209,15 @@ async def backup_database(body: Operator):
             target.close()
     operations.audit("database_backup", body.actor, {"filename": filename})
     return {"filename": filename}
+
+
+@app.get("/api/ops/backups/{backup_id}")
+async def download_backup(backup_id: str):
+    with storage.connect() as conn:
+        row = conn.execute("SELECT payload FROM application_backups WHERE id=?", (backup_id,)).fetchone()
+    if not row:
+        raise HTTPException(404, "Sauvegarde introuvable.")
+    return Response(row["payload"], media_type="application/json", headers={"Content-Disposition": 'attachment; filename="cap-avenir-backup.json"'})
 
 
 @app.get("/api/ops/agent-card")

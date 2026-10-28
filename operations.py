@@ -4,6 +4,7 @@ from pathlib import Path
 
 import release_registry
 import storage
+import database
 
 ROOT = Path(__file__).resolve().parent
 
@@ -46,8 +47,20 @@ def snapshot():
     state = get_state()
     with storage.connect() as conn:
         logs = [storage.decode(row, ["details"]) for row in conn.execute("SELECT * FROM operation_audit ORDER BY id DESC LIMIT 100")]
-    return {"version": version(), "commit": os.getenv("CAP_AVENIR_COMMIT", "local"), "paused": bool(state["paused"]),
+    return {"version": version(), "commit": os.getenv("RENDER_GIT_COMMIT") or os.getenv("CAP_AVENIR_COMMIT", "local"), "paused": bool(state["paused"]),
             "reason": state["reason"], "actor": state["actor"], "updated_at": state["updated_at"],
             "incident": state["incident"], "image_fault": image_fault(), "audit": logs,
             "releases": release_registry.read(), "active_runs": sum(r["status"] == "running" for r in storage.list_runs()),
-            "approval_scope": "Validation nominative locale pour TP, sans authentification d'identité."}
+            "platform": "render" if os.getenv("RENDER") else "local",
+            "database": "postgresql" if database.postgres_url() else "sqlite",
+            "render_dashboard_url": "https://dashboard.render.com/web/" + os.environ["RENDER_SERVICE_ID"] if os.getenv("RENDER_SERVICE_ID") else "https://dashboard.render.com/",
+            "approval_scope": "Accès protégé par mot de passe sur Render ; nom du validateur déclaré dans l'application." if os.getenv("RENDER") else "Validation nominative locale pour TP, sans authentification d'identité."}
+
+
+def record_render_deployment():
+    commit = os.getenv("RENDER_GIT_COMMIT")
+    if not os.getenv("RENDER") or not commit:
+        return
+    registry = release_registry.read()
+    if not registry["deployments"] or registry["deployments"][-1]["image_id"] != "git:" + commit:
+        release_registry.record_deployment(version(), "Render Docker", "git:" + commit, "Render", "render")

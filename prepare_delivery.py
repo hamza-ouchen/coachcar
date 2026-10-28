@@ -18,8 +18,8 @@ with (OUT / "executions.csv").open("w", encoding="utf-8-sig", newline="") as out
     writer.writerow(["correlation_id", "date", "mode", "statut", "situation", "duree_ms", "tokens", "cout_connu_usd", "cout_complet"])
     for run in runs:
         writer.writerow([run["id"], run["created_at"], run["mode"], run["status"], run["profile"]["situation"], run["duration_ms"], run["tokens"], run["cost"], run["cost_complete"]])
-runtime = ["fastapi", "uvicorn", "langgraph", "openai", "python-dotenv", "httpx"]
-(ROOT / "requirements.txt").write_text("\n".join(f"{name}=={importlib.metadata.version(name)}" for name in runtime) + "\n", encoding="utf-8")
+runtime = ["fastapi", "uvicorn", "langgraph", "openai", "python-dotenv", "httpx", "psycopg"]
+(ROOT / "requirements.txt").write_text("\n".join(f"{name if name != 'psycopg' else 'psycopg[binary]'}=={importlib.metadata.version(name)}" for name in runtime) + "\n", encoding="utf-8")
 
 # Explicit allowlist: .env, SQLite files and virtualenv are never included.
 sources = [*ROOT.glob("*.py"), ROOT / "LANCER.cmd", ROOT / "requirements.txt", ROOT / ".env.example", ROOT / ".gitignore", ROOT / "README.md", ROOT / "PLAN.md"]

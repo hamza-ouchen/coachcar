@@ -3,8 +3,9 @@ import json
 import os
 import sqlite3
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
+import database
 
 DB_PATH = Path(os.getenv("CAP_AVENIR_DB", "data/cap_avenir.db"))
 
@@ -15,6 +16,10 @@ def now():
 
 @contextmanager
 def connect():
+    if database.postgres_url():
+        with database.open_postgres() as raw:
+            yield database.PostgresConnection(raw)
+        return
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH, timeout=15)
     conn.row_factory = sqlite3.Row
@@ -27,8 +32,9 @@ def connect():
 
 
 def init_db():
+    auto_id = "BIGSERIAL PRIMARY KEY" if database.postgres_url() else "INTEGER PRIMARY KEY AUTOINCREMENT"
     with connect() as conn:
-        conn.executescript("""
+        conn.executescript(f"""
         CREATE TABLE IF NOT EXISTS runs (
           id TEXT PRIMARY KEY, created_at TEXT NOT NULL, finished_at TEXT,
           status TEXT NOT NULL, mode TEXT NOT NULL, profile TEXT NOT NULL,
@@ -39,27 +45,33 @@ def init_db():
           duration_ms REAL, prompt_tokens INTEGER, completion_tokens INTEGER,
           cost REAL, dossier TEXT, error TEXT);
         CREATE TABLE IF NOT EXISTS events (
-          id INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL,
+          id {auto_id}, run_id TEXT NOT NULL,
           step_id TEXT, agent TEXT, type TEXT NOT NULL, timestamp TEXT NOT NULL,
           elapsed_ms REAL NOT NULL, payload TEXT NOT NULL);
         CREATE INDEX IF NOT EXISTS events_run ON events(run_id, id);
         CREATE TABLE IF NOT EXISTS alerts (
-          id INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL,
+          id {auto_id}, run_id TEXT NOT NULL,
           agent TEXT NOT NULL, code TEXT NOT NULL, message TEXT NOT NULL,
           created_at TEXT NOT NULL, UNIQUE(run_id, agent, code));
         CREATE TABLE IF NOT EXISTS operation_control (
           id INTEGER PRIMARY KEY CHECK(id=1), paused INTEGER NOT NULL DEFAULT 0,
           incident TEXT NOT NULL DEFAULT 'normal', reason TEXT NOT NULL DEFAULT '',
           actor TEXT NOT NULL DEFAULT '', updated_at TEXT);
-        INSERT OR IGNORE INTO operation_control(id) VALUES(1);
+        INSERT INTO operation_control(id) VALUES(1) ON CONFLICT DO NOTHING;
         CREATE TABLE IF NOT EXISTS operation_audit (
-          id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT NOT NULL,
+          id {auto_id}, action TEXT NOT NULL,
           actor TEXT NOT NULL, created_at TEXT NOT NULL, details TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS release_registry_state (
+          id INTEGER PRIMARY KEY CHECK(id=1), payload TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS application_backups (
+          id TEXT PRIMARY KEY, created_at TEXT NOT NULL, payload TEXT NOT NULL);
         """)
         # An in-process task cannot survive a server restart.
-        conn.execute("UPDATE runs SET status='interrupted', finished_at=?, error=? WHERE status='running'",
-                     (now(), "Exécution interrompue par le redémarrage du serveur.",))
-        conn.execute("UPDATE steps SET status='interrupted', finished_at=? WHERE status='running'", (now(),))
+        # Render overlaps old/new processes briefly: do not interrupt their live runs.
+        cutoff = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat() if os.getenv("RENDER") else "9999"
+        conn.execute("UPDATE runs SET status='interrupted', finished_at=?, error=? WHERE status='running' AND created_at<?",
+                     (now(), "Exécution interrompue par le redémarrage du serveur.", cutoff))
+        conn.execute("UPDATE steps SET status='interrupted', finished_at=? WHERE status='running' AND run_id IN (SELECT id FROM runs WHERE status='interrupted')", (now(),))
 
 
 def create_run(run_id, profile, mode, model):
@@ -91,14 +103,14 @@ def finish_run(run_id, status, duration, result=None, error=None):
 
 def emit(run_id, event_type, elapsed_ms, payload=None, agent=None, step_id=None):
     with connect() as conn:
-        cur = conn.execute("INSERT INTO events(run_id,step_id,agent,type,timestamp,elapsed_ms,payload) VALUES(?,?,?,?,?,?,?)",
+        cur = conn.execute("INSERT INTO events(run_id,step_id,agent,type,timestamp,elapsed_ms,payload) VALUES(?,?,?,?,?,?,?) RETURNING id",
                            (run_id, step_id, agent, event_type, now(), elapsed_ms, json.dumps(payload or {}, ensure_ascii=False)))
-        return cur.lastrowid
+        return cur.fetchone()["id"]
 
 
 def add_alert(run_id, agent, code, message):
     with connect() as conn:
-        cur = conn.execute("INSERT OR IGNORE INTO alerts(run_id,agent,code,message,created_at) VALUES(?,?,?,?,?)",
+        cur = conn.execute("INSERT INTO alerts(run_id,agent,code,message,created_at) VALUES(?,?,?,?,?) ON CONFLICT DO NOTHING",
                            (run_id, agent or "workflow", code, message, now()))
         return cur.rowcount > 0
 
@@ -136,9 +148,9 @@ def get_run(run_id):
 def list_runs(mode=None):
     with connect() as conn:
         if mode:
-            ids = [r[0] for r in conn.execute("SELECT id FROM runs WHERE mode=? ORDER BY created_at DESC", (mode,))]
+            ids = [r["id"] for r in conn.execute("SELECT id FROM runs WHERE mode=? ORDER BY created_at DESC", (mode,))]
         else:
-            ids = [r[0] for r in conn.execute("SELECT id FROM runs ORDER BY created_at DESC")]
+            ids = [r["id"] for r in conn.execute("SELECT id FROM runs ORDER BY created_at DESC")]
     return [get_run(run_id) for run_id in ids]
 
 

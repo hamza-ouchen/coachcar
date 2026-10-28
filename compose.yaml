@@ -1,10 +1,10 @@
 services:
   app:
-    image: ${CAP_AVENIR_IMAGE:-cap-avenir:1.1.1}
+    image: ${CAP_AVENIR_IMAGE:-cap-avenir:1.2.0}
     build:
       context: .
       args:
-        APP_VERSION: "1.1.1"
+        APP_VERSION: "1.2.0"
     ports:
       - "127.0.0.1:8787:8000"
     env_file:

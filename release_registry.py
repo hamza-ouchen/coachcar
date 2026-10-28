@@ -10,6 +10,7 @@ import threading
 from pathlib import Path
 
 import storage
+import database
 
 LOCK = threading.RLock()
 SEMVER = re.compile(r"^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$")
@@ -20,6 +21,10 @@ def runtime_dir():
 
 
 def read():
+    if database.postgres_url():
+        with storage.connect() as conn:
+            row = conn.execute("SELECT payload FROM release_registry_state WHERE id=1").fetchone()
+        return json.loads(row["payload"]) if row else {"candidates": [], "deployments": []}
     path = runtime_dir() / "releases.json"
     with LOCK:
         if not path.exists():
@@ -28,6 +33,11 @@ def read():
 
 
 def save(data):
+    if database.postgres_url():
+        with storage.connect() as conn:
+            conn.execute("INSERT INTO release_registry_state(id,payload) VALUES(1,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload",
+                         (json.dumps(data, ensure_ascii=False),))
+        return
     folder = runtime_dir()
     folder.mkdir(parents=True, exist_ok=True)
     temporary = folder / "releases.next.json"

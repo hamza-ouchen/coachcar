@@ -2,6 +2,10 @@
 
 Plateforme locale d'orientation professionnelle avec trois agents LangGraph, recherche web réelle, workflow animé en perspective et dashboard de supervision.
 
+## Cloud Render
+
+La version 1.2.0 ajoute PostgreSQL et un accès par mot de passe pour Render, en conservant SQLite localement. Le fichier render.yaml prépare deux ressources Free, reliées automatiquement. Guide pas à pas : **livrables/RENDER.md**. Le service en ligne reste à créer dans le compte Render ; la présence des fichiers ne prouve pas son déploiement.
+
 ## Exploitation, Docker et gestion des versions
 
 Le plan détaillé est dans INTEGRATION-EXPLOITATION.md. Docker Desktop doit être démarré. Après la configuration initiale, **DOCKER.cmd** prépare les deux images de présentation et ouvre **http://127.0.0.1:8787/#operations**. L'installation initiale de la version stable est identifiée comme bootstrap, sans être présentée comme une revue humaine.

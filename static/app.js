@@ -479,6 +479,15 @@ async function refreshOperations() {
   $('#ops-version').textContent = `v${ops.version}`;
   $('#app-version').textContent = `v${ops.version}`;
   $('#ops-commit').textContent = ops.commit === 'local' ? 'Version locale' : `Commit ${ops.commit.slice(0,12)}`;
+  if (ops.platform === 'render') {
+    $('#ops-commit').textContent += ' · Render · PostgreSQL';
+    $('.ops-notice').firstChild.textContent = 'Démonstration cloud protégée par mot de passe · historique conservé dans PostgreSQL. ';
+    $('.ops-help').textContent = 'Sur le cloud, les mises en ligne et retours arrière se font dans Render après validation. Les fichiers CMD restent réservés à votre ordinateur. La base PostgreSQL conserve les événements et la pause entre les déploiements.';
+    if (!$('#ops-render-link')) {
+      const link = document.createElement('a'); link.id = 'ops-render-link'; link.className = 'secondary-button'; link.textContent = 'Ouvrir Render'; link.target = '_blank'; link.rel = 'noopener noreferrer'; link.href = ops.render_dashboard_url;
+      $('#operations-view .export-actions').prepend(link);
+    }
+  }
   $('#ops-service').className = `badge ${ops.paused ? 'failed':'completed'}`;
   $('#ops-service').textContent = ops.paused ? 'Analyses suspendues':'Analyses autorisées';
   $('#ops-active').textContent = `${ops.active_runs} mission(s) active(s)`;
@@ -490,7 +499,7 @@ async function refreshOperations() {
   $('#ops-image-fault').textContent = ops.image_fault ? 'IMAGE D’INCIDENT : cette version force une erreur démo. Revenez à l’image stable pour supprimer cette panne.' : 'L’incident ne modifie pas les analyses réelles.';
   const candidates = [...ops.releases.candidates].reverse();
   const reviewLabels = {pending:'À valider', approved:'Approuvée', rejected:'Refusée'};
-  $('#ops-releases').innerHTML = candidates.length ? candidates.map(candidate => `<tr><td><strong>v${esc(candidate.version)}</strong><code title="${esc(candidate.image_id)}">${esc(candidate.image_id.slice(0,23))}…</code></td><td>${candidate.demo_fault ? 'Image d’incident démo':'Version normale'}<br><small>${esc(candidate.image)}</small></td><td><span class="badge ${candidate.status === 'approved' ? 'completed':candidate.status === 'rejected' ? 'failed':'partial'}">${reviewLabels[candidate.status]}</span>${candidate.reviewer ? `<small class="reviewer">${esc(candidate.reviewer)} · ${esc(dateLabel(candidate.reviewed_at))}</small>`:''}</td><td>${candidate.status === 'pending' ? `<div class="ops-review-buttons"><button class="secondary-button" data-review="approved" data-version="${esc(candidate.version)}">Approuver</button><button class="text-button" data-review="rejected" data-version="${esc(candidate.version)}">Refuser</button></div>`:'Décision enregistrée'}</td></tr>`).join('') : '<tr><td colspan="4" class="table-empty">Utilisez DOCKER.cmd pour préparer les images de démonstration.</td></tr>';
+  $('#ops-releases').innerHTML = candidates.length ? candidates.map(candidate => `<tr><td><strong>v${esc(candidate.version)}</strong><code title="${esc(candidate.image_id)}">${esc(candidate.image_id.slice(0,23))}…</code></td><td>${candidate.demo_fault ? 'Image d’incident démo':'Version normale'}<br><small>${esc(candidate.image)}</small></td><td><span class="badge ${candidate.status === 'approved' ? 'completed':candidate.status === 'rejected' ? 'failed':'partial'}">${reviewLabels[candidate.status]}</span>${candidate.reviewer ? `<small class="reviewer">${esc(candidate.reviewer)} · ${esc(dateLabel(candidate.reviewed_at))}</small>`:''}</td><td>${candidate.status === 'pending' ? `<div class="ops-review-buttons"><button class="secondary-button" data-review="approved" data-version="${esc(candidate.version)}">Approuver</button><button class="text-button" data-review="rejected" data-version="${esc(candidate.version)}">Refuser</button></div>`:'Décision enregistrée'}</td></tr>`).join('') : `<tr><td colspan="4" class="table-empty">${ops.platform === 'render' ? 'Les versions cloud et leur rollback sont gérés dans le tableau de bord Render.':'Utilisez DOCKER.cmd pour préparer les images de démonstration.'}</td></tr>`;
   $$('[data-review]').forEach(button => button.addEventListener('click', async () => {
     try {
       await opsPost(`/api/ops/releases/${encodeURIComponent(button.dataset.version)}/review`, {...operatorBody(), decision:button.dataset.review, agent_card_reviewed:$('#ops-card-reviewed').checked});
@@ -499,7 +508,7 @@ async function refreshOperations() {
   }));
   const actionLabels = {kill_switch_on:'Arrêt d’urgence activé', kill_switch_off:'Analyses réautorisées', tasks_cancelled:'Tâches interrompues', incident_changed:'Scénario de démo modifié', release_approved:'Version approuvée', release_rejected:'Version refusée', database_backup:'Sauvegarde SQLite'};
   const interventions = ops.audit.map(event => ({at:event.created_at, actor:event.actor, title:actionLabels[event.action] || event.action, detail:JSON.stringify(event.details)}));
-  const deployments = ops.releases.deployments.map(event => ({at:event.at, actor:event.operator, title:event.kind === 'rollback' ? 'Rollback réalisé':event.kind === 'bootstrap' ? 'Installation initiale':'Version déployée', detail:`v${event.version} · ${event.image_id.slice(0,23)}…`}));
+  const deployments = ops.releases.deployments.map(event => ({at:event.at, actor:event.operator, title:event.kind === 'render' ? 'Déploiement Render':event.kind === 'rollback' ? 'Rollback réalisé':event.kind === 'bootstrap' ? 'Installation initiale':'Version déployée', detail:`v${event.version} · ${event.image_id.slice(0,23)}…`}));
   const logs = [...interventions,...deployments].sort((a,b) => b.at.localeCompare(a.at));
   $('#ops-audit').innerHTML = logs.length ? logs.slice(0,60).map(event => `<div class="ops-audit-row"><span>${esc(dateLabel(event.at))}</span><div><strong>${esc(event.title)}</strong><p>${esc(event.detail)}</p></div><small>${esc(event.actor)}</small></div>`).join('') : '<div class="empty-state">Aucune intervention enregistrée.</div>';
 }

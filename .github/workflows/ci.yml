@@ -37,13 +37,43 @@ jobs:
         run: python -m pip check
 
       - name: Verifier la syntaxe Python
-        run: python -m compileall -q app.py provider.py workflow.py storage.py operations.py release_registry.py launch.py setup_secret.py scripts tests
+        run: python -m compileall -q app.py provider.py workflow.py storage.py database.py access.py container_start.py operations.py release_registry.py launch.py setup_secret.py scripts tests
 
       - name: Verifier la syntaxe JavaScript
         run: node --check static/app.js
 
       - name: Tester le workflow agentique et la livraison sans appel API
         run: python -m unittest discover -s tests -v
+
+  postgres:
+    name: Verifier la persistance PostgreSQL du cloud
+    needs: tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: classroom-test-only
+          POSTGRES_DB: capavenir_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://postgres:classroom-test-only@localhost:5432/capavenir_test
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -r requirements.txt
+      - name: Tester le workflow et les sauvegardes dans PostgreSQL reel
+        run: python -m unittest discover -s tests -p test_postgres.py -v
 
   docker:
     name: Tester les conteneurs et la reprise
@@ -60,7 +90,7 @@ jobs:
       - name: Construire la version stable
         run: docker build -t cap-avenir:ci --build-arg APP_VERSION="$(cat VERSION)" .
       - name: Construire la version d'incident controle
-        run: docker build -t cap-avenir:ci-incident --build-arg APP_VERSION=1.1.2-incident.1 --build-arg DEMO_FAULT=1 .
+        run: docker build -t cap-avenir:ci-incident --build-arg APP_VERSION=1.2.1-incident.1 --build-arg DEMO_FAULT=1 .
       - name: Tester approbation, incident, arret et rollback dans Docker
         run: python scripts/rehearse.py --stable cap-avenir:ci --incident cap-avenir:ci-incident --output ci-output/exercice-docker.json
       - uses: actions/upload-artifact@v7
@@ -73,7 +103,7 @@ jobs:
 
   delivery:
     name: Preparer la version livrable
-    needs: [tests, docker]
+    needs: [tests, postgres, docker]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

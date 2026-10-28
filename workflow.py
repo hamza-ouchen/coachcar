@@ -11,6 +11,7 @@ from langgraph.graph import StateGraph, START, END
 import provider
 import storage
 import operations
+import database
 
 AGENTS = {"evolution": "Évolution", "reconversion": "Reconversion", "supervisor": "Superviseur"}
 SLOW_SECONDS = float(os.getenv("SLOW_STEP_SECONDS", "45"))
@@ -119,6 +120,16 @@ def build_graph(ctx):
 async def execute(run_id, profile, demo=False, scenario="normal"):
     ctx = Execution(run_id, demo, scenario)
     ctx.event("run_started", {"message": "Mission lancée", "mode": "demo" if demo else "live"})
+    async def watch_shared_pause(task):
+        # Render can briefly route to old/new processes during a deploy.
+        # Every active run observes the shared persistent switch as well.
+        while True:
+            await asyncio.sleep(1)
+            if operations.get_state()["paused"]:
+                task.cancel()
+                return
+
+    watcher = asyncio.create_task(watch_shared_pause(asyncio.current_task())) if database.postgres_url() else None
     try:
         state = await build_graph(ctx).ainvoke({"profile": profile})
         result = state.get("supervisor", {})
@@ -137,6 +148,13 @@ async def execute(run_id, profile, demo=False, scenario="normal"):
         storage.finish_run(run_id, "failed", ctx.elapsed(), error=error)
         ctx.alert("workflow", "error", error)
         ctx.event("run_failed", {"status": "failed", "message": error})
+    finally:
+        if watcher:
+            watcher.cancel()
+            try:
+                await watcher
+            except asyncio.CancelledError:
+                pass
 
 
 def export_workflow():
