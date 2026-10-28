@@ -15,7 +15,7 @@ flowchart TD
     G --> H[Archive telechargeable dans GitHub Actions]
 ```
 
-Le premier job `tests` controle le programme. Le second job `delivery` contient `needs: tests` : il est execute seulement apres la reussite du premier. Les erreurs arretent normalement les etapes suivantes. Les archives d'anciens runs restent independantes d'un nouveau run en echec.
+Le job `tests` controle le programme. Le job `docker` construit les images et execute le runbook en conteneurs isoles. Le job `delivery` contient `needs: [tests, docker]` : il est execute seulement apres leur reussite. Les erreurs arretent normalement les etapes suivantes. Les archives d'anciens runs restent independantes d'un nouveau run en echec.
 
 ## Ce que les tests verifient
 
@@ -54,7 +54,13 @@ Double-cliquer **VERIFIER.cmd**. Le lanceur utilise l'environnement existant et 
 
 ## Comment l'expliquer au professeur
 
-« Nous avons ajoute une integration continue qui teste automatiquement le workflow des agents a chaque modification envoyee sur GitHub. Les reponses du fournisseur sont simulees pour avoir des tests reproductibles sans cout API. Si tous les controles passent, un second job prepare une archive liee a la revision testee. Nous faisons une livraison d'artefact ; le deploiement sur un serveur d'hebergement n'est pas configure. »
+« Nous avons ajoute une integration continue qui teste automatiquement le workflow des agents a chaque modification envoyee sur GitHub. Les reponses du fournisseur sont simulees pour avoir des tests reproductibles sans cout API. Un exercice realise aussi l'arret et le rollback dans de vrais conteneurs Docker. Si les controles passent, un job prepare une archive liee a la revision testee. La publication de l'image est un workflow distinct qui demande une approbation GitHub ; le remplacement du conteneur sur la machine reste explicite. »
+
+## Publication Docker approuvee
+
+Le workflow `.github/workflows/release.yml`, lance manuellement avec la version du fichier VERSION, verifie que l'environnement GitHub production possede des approbateurs obligatoires. Il teste l'image, la conserve en artefact, puis attend le job protege par cet environnement. Apres approbation dans GitHub, l'image conservee est chargee et publiee dans `ghcr.io/hamza-ouchen/coachcar:<version>` sans reconstruction. Une version existante n'est pas remplacee volontairement ; les publications d'une meme version doivent etre serialisees.
+
+La protection production a ete configuree par le proprietaire et verifiee via l'API GitHub : approbateur hamza-ouchen, auto-approbation autorisee pour la presentation. Une execution automatique du runbook ne remplace pas cette decision humaine.
 
 Il faut distinguer le workflow LangGraph, qui execute une orientation, du workflow GitHub Actions, qui verifie et livre le logiciel.
 

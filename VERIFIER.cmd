@@ -8,7 +8,7 @@ if not exist ".venv\Scripts\python.exe" (
 )
 ".venv\Scripts\python.exe" -m pip check
 if errorlevel 1 goto :error
-".venv\Scripts\python.exe" -m compileall -q app.py provider.py workflow.py storage.py launch.py setup_secret.py scripts tests
+".venv\Scripts\python.exe" -m compileall -q app.py provider.py workflow.py storage.py operations.py release_registry.py launch.py setup_secret.py scripts tests
 if errorlevel 1 goto :error
 node --check static/app.js
 if errorlevel 1 goto :error

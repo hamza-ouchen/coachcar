@@ -47,6 +47,14 @@ def init_db():
           id INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL,
           agent TEXT NOT NULL, code TEXT NOT NULL, message TEXT NOT NULL,
           created_at TEXT NOT NULL, UNIQUE(run_id, agent, code));
+        CREATE TABLE IF NOT EXISTS operation_control (
+          id INTEGER PRIMARY KEY CHECK(id=1), paused INTEGER NOT NULL DEFAULT 0,
+          incident TEXT NOT NULL DEFAULT 'normal', reason TEXT NOT NULL DEFAULT '',
+          actor TEXT NOT NULL DEFAULT '', updated_at TEXT);
+        INSERT OR IGNORE INTO operation_control(id) VALUES(1);
+        CREATE TABLE IF NOT EXISTS operation_audit (
+          id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT NOT NULL,
+          actor TEXT NOT NULL, created_at TEXT NOT NULL, details TEXT NOT NULL);
         """)
         # An in-process task cannot survive a server restart.
         conn.execute("UPDATE runs SET status='interrupted', finished_at=?, error=? WHERE status='running'",

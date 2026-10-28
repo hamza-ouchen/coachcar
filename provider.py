@@ -137,8 +137,10 @@ async def call_agent(agent, profile, dossiers=None):
 
 async def demo_agent(agent, profile, dossiers=None, scenario="normal"):
     delays = {"evolution": 4.0, "reconversion": 6.0, "supervisor": 3.0}
+    if scenario == "incident_slow":
+        delays = {"evolution": 30.0, "reconversion": 35.0, "supervisor": 3.0}
     await asyncio.sleep(delays[agent])
-    if scenario == "alerts" and agent == "reconversion":
+    if scenario in ("alerts", "incident_error") and agent == "reconversion":
         raise ValueError("Erreur simulée : service de recherche momentanément indisponible.")
     usage = {"prompt_tokens": 1320 if agent != "supervisor" else 2860,
              "completion_tokens": 680 if agent != "supervisor" else 950,

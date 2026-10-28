@@ -1,0 +1,85 @@
+name: Cap Avenir - Publication approuvee
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version stable du fichier VERSION (ex. 1.1.0)"
+        required: true
+        default: "1.1.0"
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  PYTHONUTF8: "1"
+  OPENROUTER_API_KEY: ""
+
+jobs:
+  validate:
+    name: Verifier la version et preparer l'image testee
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      version: ${{ steps.policy.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -r requirements.txt
+      - name: Exiger un approbateur GitHub configure
+        id: policy
+        env:
+          RELEASE_VERSION: ${{ inputs.version || github.ref_name }}
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/release_policy.py
+      - run: python -m unittest discover -s tests -v
+      - name: Construire l'image a valider
+        env:
+          RELEASE_VERSION: ${{ steps.policy.outputs.version }}
+          RELEASE_COMMIT: ${{ github.sha }}
+        run: docker build --build-arg APP_VERSION="$RELEASE_VERSION" --build-arg APP_COMMIT="$RELEASE_COMMIT" -t cap-avenir:release .
+      - name: Construire l'image de panne pour l'exercice
+        run: docker build --build-arg APP_VERSION=1.1.1-incident.1 --build-arg DEMO_FAULT=1 -t cap-avenir:release-incident .
+      - name: Valider les procedures avec les vrais conteneurs
+        run: python scripts/rehearse.py --stable cap-avenir:release --incident cap-avenir:release-incident --output ci-output/exercice-release.json
+      - name: Conserver exactement l'image testee pour l'approbation
+        run: docker save cap-avenir:release --output ci-output/release-image.tar
+      - uses: actions/upload-artifact@v7
+        with:
+          name: image-a-approuver-${{ github.sha }}
+          path: |
+            ci-output/release-image.tar
+            ci-output/exercice-release.json
+          if-no-files-found: error
+          retention-days: 2
+
+  publish:
+    name: Approuver puis publier l'image testee
+    needs: validate
+    environment: production
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v8
+        with:
+          name: image-a-approuver-${{ github.sha }}
+          path: ci-output
+      - name: Publier sans reconstruire l'image approuvee
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+        run: python scripts/publish_image.py

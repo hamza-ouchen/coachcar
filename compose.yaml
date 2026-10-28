@@ -1,0 +1,19 @@
+services:
+  app:
+    image: ${CAP_AVENIR_IMAGE:-cap-avenir:1.1.0}
+    build:
+      context: .
+      args:
+        APP_VERSION: "1.1.0"
+    ports:
+      - "127.0.0.1:8080:8000"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      CAP_AVENIR_DB: /app/data/cap_avenir.db
+      CAP_AVENIR_RUNTIME_DIR: /app/runtime
+    volumes:
+      - ./data:/app/data
+      - ./runtime:/app/runtime
+    restart: unless-stopped

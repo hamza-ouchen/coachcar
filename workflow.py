@@ -10,6 +10,7 @@ from langgraph.graph import StateGraph, START, END
 
 import provider
 import storage
+import operations
 
 AGENTS = {"evolution": "Évolution", "reconversion": "Reconversion", "supervisor": "Superviseur"}
 SLOW_SECONDS = float(os.getenv("SLOW_STEP_SECONDS", "45"))
@@ -46,6 +47,9 @@ class Execution:
         self.alert(agent, "slow", f"{AGENTS[agent]} dépasse le seuil de {threshold:g} secondes.", step_id)
 
     async def node(self, agent, state):
+        # Check again at every node boundary: a pause must also prevent handoffs.
+        if operations.get_state()["paused"]:
+            raise asyncio.CancelledError("Arrêt d'urgence actif")
         if agent == "supervisor" and all(state.get(a, {}).get("error") for a in ("evolution", "reconversion")):
             self.event("agent_skipped", {"message": "Aucun dossier exploitable : synthèse annulée."}, agent)
             return {agent: {"error": "Les deux recherches ont échoué."}}
@@ -65,6 +69,11 @@ class Execution:
             if agent != "supervisor":
                 self.event("handoff", {"from": agent, "to": "supervisor", "message": "Dossier transmis au superviseur", "title": dossier.get("title", "Dossier")}, agent, step_id)
             return {agent: dossier}
+        except asyncio.CancelledError:
+            duration = round((perf_counter() - started) * 1000, 2)
+            storage.finish_step(step_id, "cancelled", duration, error="Étape interrompue localement.")
+            self.event("agent_cancelled", {"message": "Étape interrompue par l'arrêt du traitement", "duration_ms": duration}, agent, step_id)
+            raise
         except Exception as exc:
             error = provider.friendly_error(exc)
             duration = round((perf_counter() - started) * 1000, 2)
@@ -118,6 +127,11 @@ async def execute(run_id, profile, demo=False, scenario="normal"):
         status = "failed" if failed else "partial" if partial else "completed"
         storage.finish_run(run_id, status, ctx.elapsed(), None if failed else result, failed)
         ctx.event("run_failed" if failed else "run_completed", {"status": status, "message": failed or ("Recommandation partielle disponible" if partial else "Votre orientation est prête")})
+    except asyncio.CancelledError:
+        message = "Traitement annulé localement ; les frais déjà engagés auprès du fournisseur peuvent subsister."
+        storage.finish_run(run_id, "cancelled", ctx.elapsed(), error=message)
+        ctx.event("run_cancelled", {"status": "cancelled", "message": message})
+        raise
     except Exception as exc:
         error = provider.friendly_error(exc)
         storage.finish_run(run_id, "failed", ctx.elapsed(), error=error)
@@ -127,8 +141,9 @@ async def execute(run_id, profile, demo=False, scenario="normal"):
 
 def export_workflow():
     graph = build_graph(Execution("export"))
-    return {"name": "Cap Avenir", "version": 1, "framework": "LangGraph", "model": provider.MODEL,
+    return {"name": "Cap Avenir", "version": operations.version(), "framework": "LangGraph", "model": provider.MODEL,
             "description": "Deux recherches parallèles puis un superviseur ; état partagé et événements corrélés.",
             "graph": graph.get_graph().to_json(),
             "agents": AGENTS, "alerts": {"slow_seconds": SLOW_SECONDS, "budget_usd": BUDGET_USD, "error": "Échec d'une étape"},
-            "mermaid": graph.get_graph().draw_mermaid()}
+            "mermaid": graph.get_graph().draw_mermaid(),
+            "operations": {"approval": "Image Docker exacte approuvée avant déploiement via le gestionnaire local", "kill_switch": "Pause persistante et annulation locale", "rollback": "Retour à une image précédemment déployée", "incidents": "Mode démonstration uniquement"}}

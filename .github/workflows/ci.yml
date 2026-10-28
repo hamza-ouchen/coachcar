@@ -35,7 +35,7 @@ jobs:
         run: python -m pip check
 
       - name: Verifier la syntaxe Python
-        run: python -m compileall -q app.py provider.py workflow.py storage.py launch.py setup_secret.py scripts tests
+        run: python -m compileall -q app.py provider.py workflow.py storage.py operations.py release_registry.py launch.py setup_secret.py scripts tests
 
       - name: Verifier la syntaxe JavaScript
         run: node --check static/app.js
@@ -43,9 +43,34 @@ jobs:
       - name: Tester le workflow agentique et la livraison sans appel API
         run: python -m unittest discover -s tests -v
 
+  docker:
+    name: Tester les conteneurs et la reprise
+    needs: tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -r requirements.txt
+      - name: Construire la version stable
+        run: docker build -t cap-avenir:ci --build-arg APP_VERSION=1.1.0 .
+      - name: Construire la version d'incident controle
+        run: docker build -t cap-avenir:ci-incident --build-arg APP_VERSION=1.1.1-incident.1 --build-arg DEMO_FAULT=1 .
+      - name: Tester approbation, incident, arret et rollback dans Docker
+        run: python scripts/rehearse.py --stable cap-avenir:ci --incident cap-avenir:ci-incident --output ci-output/exercice-docker.json
+      - uses: actions/upload-artifact@v7
+        with:
+          name: exercice-docker-${{ github.sha }}
+          path: ci-output/exercice-docker.json
+          if-no-files-found: error
+          retention-days: 14
+
   delivery:
     name: Preparer la version livrable
-    needs: tests
+    needs: [tests, docker]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

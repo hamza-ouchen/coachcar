@@ -17,9 +17,12 @@ from pydantic import BaseModel, Field, field_validator
 import provider
 import storage
 import workflow
+import operations
+import release_registry
 
 ROOT = Path(__file__).resolve().parent
 TASKS = set()
+RUN_TASKS = {}
 
 
 @asynccontextmanager
@@ -67,11 +70,16 @@ def require_run(run_id):
 @app.get("/api/health")
 async def health():
     return {"ok": True, "application": "cap-avenir", "configured": bool(os.getenv("OPENROUTER_API_KEY")), "model": provider.MODEL,
-            "slow_seconds": workflow.SLOW_SECONDS, "budget_usd": workflow.BUDGET_USD}
+            "slow_seconds": workflow.SLOW_SECONDS, "budget_usd": workflow.BUDGET_USD,
+            "version": operations.version(), "paused": bool(operations.get_state()["paused"]),
+            "demo_fault": operations.image_fault()}
 
 
 @app.post("/api/runs", status_code=202)
 async def create_run(body: RunRequest):
+    control = operations.get_state()
+    if control["paused"]:
+        raise HTTPException(503, "Arrêt d'urgence actif : les nouvelles analyses sont suspendues.")
     if body.mode == "live" and not os.getenv("OPENROUTER_API_KEY"):
         raise HTTPException(503, "Clé OpenRouter absente. Configurez .env ou utilisez le mode démonstration.")
     active = [r for r in storage.list_runs() if r["status"] == "running"]
@@ -80,10 +88,114 @@ async def create_run(body: RunRequest):
     run_id = str(uuid4())
     profile = body.profile.model_dump()
     storage.create_run(run_id, profile, body.mode, "demo-local" if body.mode == "demo" else provider.MODEL)
-    task = asyncio.create_task(workflow.execute(run_id, profile, body.mode == "demo", body.scenario))
+    scenario = body.scenario
+    if body.mode == "demo":
+        if operations.image_fault() or control["incident"] == "provider_error":
+            scenario = "incident_error"
+        elif control["incident"] == "slow":
+            scenario = "incident_slow"
+    task = asyncio.create_task(workflow.execute(run_id, profile, body.mode == "demo", scenario))
     TASKS.add(task)
+    RUN_TASKS[run_id] = task
     task.add_done_callback(TASKS.discard)
+    task.add_done_callback(lambda completed: RUN_TASKS.pop(run_id, None))
     return {"id": run_id, "correlation_id": run_id}
+
+
+class Operator(BaseModel):
+    actor: str = Field(min_length=2, max_length=80)
+    reason: str = Field(default="Intervention pédagogique", max_length=300)
+
+    @field_validator("actor", mode="before")
+    @classmethod
+    def strip_actor(cls, value):
+        return value.strip() if isinstance(value, str) else value
+
+
+class PauseRequest(Operator):
+    paused: bool
+
+
+class IncidentRequest(Operator):
+    incident: Literal["normal", "provider_error", "slow"]
+
+
+class ReviewRequest(Operator):
+    decision: Literal["approved", "rejected"]
+    agent_card_reviewed: bool = False
+
+
+@app.get("/api/ops")
+async def operation_status():
+    return operations.snapshot()
+
+
+@app.post("/api/ops/pause")
+async def pause(body: PauseRequest):
+    # Persist the gate BEFORE yielding the event loop or cancelling a task.
+    operations.change_pause(body.paused, body.actor, body.reason)
+    cancelled = []
+    if body.paused:
+        tasks = list(RUN_TASKS.items())
+        for run_id, task in tasks:
+            if not task.done():
+                task.cancel()
+                cancelled.append(run_id)
+        if tasks:
+            await asyncio.gather(*(task for _, task in tasks), return_exceptions=True)
+        # A task cancelled before its first instruction cannot write its own trace.
+        for run_id in cancelled:
+            run = storage.get_run(run_id)
+            if run and run["status"] == "running":
+                storage.finish_run(run_id, "cancelled", 0, error="Arrêt d'urgence avant démarrage.")
+                storage.emit(run_id, "run_cancelled", 0, {"status": "cancelled", "message": "Arrêt d'urgence avant démarrage"})
+        operations.audit("tasks_cancelled", body.actor, {"run_ids": cancelled})
+    return {"paused": body.paused, "cancelled": cancelled}
+
+
+@app.post("/api/ops/incident")
+async def incident(body: IncidentRequest):
+    operations.change_incident(body.incident, body.actor)
+    return {"incident": body.incident, "scope": "demo_only"}
+
+
+@app.post("/api/ops/releases/{version}/review")
+async def review_release(version: str, body: ReviewRequest):
+    try:
+        result = release_registry.review(version, body.decision, body.actor, body.reason, body.agent_card_reviewed)
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from None
+    operations.audit("release_" + body.decision, body.actor, {"version": version, "image_id": result["image_id"], "reason": body.reason, "agent_card_reviewed": body.agent_card_reviewed})
+    return result
+
+
+@app.get("/api/ops/export")
+async def export_operations():
+    return JSONResponse(operations.snapshot(), headers={"Content-Disposition": 'attachment; filename="cap-avenir-exploitation.json"'})
+
+
+@app.post("/api/ops/backup")
+async def backup_database(body: Operator):
+    import sqlite3
+    from datetime import datetime, timezone
+    if any(r["status"] == "running" for r in storage.list_runs()):
+        raise HTTPException(409, "Terminez ou interrompez les missions avant la sauvegarde.")
+    folder = storage.DB_PATH.parent / "backups"
+    folder.mkdir(parents=True, exist_ok=True)
+    filename = "cap-avenir-" + datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f") + ".db"
+    with storage.connect() as source:
+        target = sqlite3.connect(folder / filename)
+        try:
+            source.backup(target)
+        finally:
+            target.close()
+    operations.audit("database_backup", body.actor, {"filename": filename})
+    return {"filename": filename}
+
+
+@app.get("/api/ops/agent-card")
+async def agent_card():
+    return FileResponse(ROOT / "livrables" / "AGENT_CARD.md", media_type="text/markdown", filename="AGENT_CARD.md")
 
 
 @app.get("/api/runs")

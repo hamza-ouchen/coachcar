@@ -10,3 +10,5 @@ ci-output/
 livrables/*.zip
 livrables/executions.csv
 livrables/exemple-analyse-reelle.json
+runtime/
+livrables/exercice-*.json

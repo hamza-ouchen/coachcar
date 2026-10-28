@@ -11,9 +11,9 @@ const duration = ms => ms == null ? '—' : `${(Number(ms) / 1000).toFixed(1)} s
 const number = value => value == null ? '—' : Number(value).toLocaleString('fr-FR');
 const names = {evolution:'Évolution', reconversion:'Reconversion', supervisor:'Superviseur', workflow:'Workflow'};
 const icons = {evolution:'trend', reconversion:'route', supervisor:'layers'};
-const statuses = {running:'En cours', completed:'Terminée', partial:'Partielle', failed:'En erreur', interrupted:'Interrompue'};
+const statuses = {running:'En cours', completed:'Terminée', partial:'Partielle', failed:'En erreur', interrupted:'Interrompue', cancelled:'Annulée'};
 const state = {run:null, events:[], steps:{}, stream:null, view:'orientation', mode:'live', runs:[], metrics:null,
-  elapsed:0, anchor:0, anchorTime:0, replaying:false, replaySource:[], replayIndex:0, lastRefresh:0, finishing:false};
+  elapsed:0, anchor:0, anchorTime:0, replaying:false, replaySource:[], replayIndex:0, lastRefresh:0, finishing:false, ops:null, opsRefresh:0};
 
 $$('[data-icon]').forEach(el => el.innerHTML = icon(el.dataset.icon));
 
@@ -56,10 +56,12 @@ function changeView(view) {
   state.view = view;
   $('#orientation-view').classList.toggle('hidden', view !== 'orientation');
   $('#supervision-view').classList.toggle('hidden', view !== 'supervision');
+  $('#operations-view').classList.toggle('hidden', view !== 'operations');
   $$('.nav-item').forEach(el => el.classList.toggle('active', el.dataset.view === view));
-  $('#breadcrumb-current').textContent = view === 'orientation' ? 'Mon orientation' : 'Supervision';
+  $('#breadcrumb-current').textContent = view === 'orientation' ? 'Mon orientation' : view === 'operations' ? 'Exploitation' : 'Supervision';
   history.replaceState(null, '', `#${view}`);
   if (view === 'supervision') refreshSupervision().catch(error => toast(error.message));
+  if (view === 'operations') refreshOperations().catch(error => toast(error.message));
 }
 
 $$('[data-view]').forEach(button => button.addEventListener('click', () => changeView(button.dataset.view)));
@@ -128,9 +130,9 @@ function consumeEvent(event, animation = true) {
   const agent = event.agent;
   if (event.type === 'agent_started') {
     state.steps[agent] = {agent, status:'running', start:event.elapsed_ms, end:null, usage:null};
-  } else if (['agent_completed','agent_failed'].includes(event.type)) {
+  } else if (['agent_completed','agent_failed','agent_cancelled'].includes(event.type)) {
     const step = state.steps[agent] || {agent, start:Math.max(0,event.elapsed_ms - (event.payload.duration_ms || 0))};
-    Object.assign(step, {status:event.type === 'agent_completed' ? 'completed':'failed', end:event.elapsed_ms,
+    Object.assign(step, {status:event.type === 'agent_completed' ? 'completed':event.type === 'agent_cancelled' ? 'cancelled':'failed', end:event.elapsed_ms,
       duration_ms:event.payload.duration_ms, usage:event.payload.usage, source_count:event.payload.source_count || 0});
     state.steps[agent] = step;
   } else if (event.type === 'agent_skipped') {
@@ -160,7 +162,7 @@ function renderMission() {
   for (const agent of Object.keys(names).filter(a => a !== 'workflow')) {
     const node = $(`.agent-node[data-agent="${agent}"]`);
     const step = state.steps[agent];
-    node.classList.remove('running','completed','failed');
+    node.classList.remove('running','completed','failed','cancelled');
     if (step?.status) node.classList.add(step.status);
     let elapsed = step ? (step.end != null ? step.duration_ms : Math.max(0,state.elapsed - step.start)) : null;
     $('.node-duration', node).textContent = duration(elapsed);
@@ -168,7 +170,7 @@ function renderMission() {
     $('.agent-state', node).textContent = !step ? (agent === 'supervisor' ? 'Attend les deux dossiers':'En attente') :
       step.status === 'running' ? (agent === 'supervisor' ? 'Compare les trajectoires…':'Recherche et analyse…') :
       step.status === 'completed' ? (agent === 'supervisor' ? 'Recommandation prête':'Dossier transmis') :
-      step.status === 'skipped' ? 'Synthèse annulée':'Erreur · voir le détail';
+      step.status === 'skipped' ? 'Synthèse annulée':step.status === 'cancelled' ? 'Interrompu localement':'Erreur · voir le détail';
     if (step?.usage) {
       tokens += (step.usage.prompt_tokens || 0) + (step.usage.completion_tokens || 0);
       if (step.usage.cost != null) costs.push(step.usage.cost);
@@ -246,7 +248,7 @@ function listen(id) {
       const event = JSON.parse(message.data);
       consumeEvent(event);
       renderMission(); renderLog();
-      if (['run_completed','run_failed'].includes(event.type)) finishMission(id);
+      if (['run_completed','run_failed','run_cancelled'].includes(event.type)) finishMission(id);
     } catch { toast('Un événement est illisible ; la reconnexion conserve les résultats.'); }
   };
   stream.addEventListener('closed', () => { stream.close(); if (state.run?.id === id && state.run.status === 'running') finishMission(id); });
@@ -263,7 +265,7 @@ async function finishMission(id) {
   try {
     state.stream?.close();
     await openRun(id, false);
-    toast(state.run.status === 'failed' ? 'La mission a rencontré une erreur. Consultez les détails.' : 'Votre recommandation est prête.');
+    toast(state.run.status === 'cancelled' ? 'La mission a été interrompue localement.' : state.run.status === 'failed' ? 'La mission a rencontré une erreur. Consultez les détails.' : 'Votre recommandation est prête.');
     if (state.view === 'supervision') await refreshSupervision();
   } catch (error) { toast(error.message); }
   finally { state.finishing = false; }
@@ -430,6 +432,7 @@ $$('[data-metric-mode]').forEach(button => button.addEventListener('click', () =
   refreshSupervision().catch(error => toast(error.message));
 }));
 $('#status-filter').addEventListener('change', renderHistory);
+$('#status-filter').add(new Option('Annulées', 'cancelled'));
 $('#projection-count').addEventListener('change', renderProjection);
 $('#refresh-btn').addEventListener('click', () => refreshSupervision().catch(error => toast(error.message)));
 $('#csv-export').addEventListener('click', () => { window.location.href = `/api/exports/runs.csv?mode=${state.mode}`; });
@@ -453,13 +456,84 @@ setInterval(() => {
     state.lastRefresh = Date.now();
     refreshSupervision().catch(() => {});
   }
+  if (state.view === 'operations' && Date.now()-state.opsRefresh > 3000) {
+    state.opsRefresh = Date.now();
+    refreshOperations().catch(() => {});
+  }
 }, 180);
+
+function operatorBody() {
+  const actor = $('#ops-actor').value.trim();
+  if (actor.length < 2) throw new Error('Indiquez votre nom pour tracer cette intervention.');
+  localStorage.setItem('capavenir-operator', actor);
+  return {actor, reason:$('#ops-reason').value.trim() || 'Intervention pédagogique'};
+}
+
+async function opsPost(path, body) {
+  return api(path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+}
+
+async function refreshOperations() {
+  const ops = await api('/api/ops');
+  state.ops = ops; state.opsRefresh = Date.now();
+  $('#ops-version').textContent = `v${ops.version}`;
+  $('#app-version').textContent = `v${ops.version}`;
+  $('#ops-commit').textContent = ops.commit === 'local' ? 'Version locale' : `Commit ${ops.commit.slice(0,12)}`;
+  $('#ops-service').className = `badge ${ops.paused ? 'failed':'completed'}`;
+  $('#ops-service').textContent = ops.paused ? 'Analyses suspendues':'Analyses autorisées';
+  $('#ops-active').textContent = `${ops.active_runs} mission(s) active(s)`;
+  $('#ops-stop').disabled = ops.paused;
+  $('#ops-resume').disabled = !ops.paused;
+  $('#ops-test-incident').disabled = ops.paused;
+  $('#ops-pause-note').textContent = ops.paused ? `Pause persistante · ${ops.actor} · ${ops.reason}` : 'Les frais déjà engagés chez le fournisseur peuvent subsister après l’arrêt.';
+  if (document.activeElement !== $('#ops-incident')) $('#ops-incident').value = ops.incident;
+  $('#ops-image-fault').textContent = ops.image_fault ? 'IMAGE D’INCIDENT : cette version force une erreur démo. Revenez à l’image stable pour supprimer cette panne.' : 'L’incident ne modifie pas les analyses réelles.';
+  const candidates = [...ops.releases.candidates].reverse();
+  const reviewLabels = {pending:'À valider', approved:'Approuvée', rejected:'Refusée'};
+  $('#ops-releases').innerHTML = candidates.length ? candidates.map(candidate => `<tr><td><strong>v${esc(candidate.version)}</strong><code title="${esc(candidate.image_id)}">${esc(candidate.image_id.slice(0,23))}…</code></td><td>${candidate.demo_fault ? 'Image d’incident démo':'Version normale'}<br><small>${esc(candidate.image)}</small></td><td><span class="badge ${candidate.status === 'approved' ? 'completed':candidate.status === 'rejected' ? 'failed':'partial'}">${reviewLabels[candidate.status]}</span>${candidate.reviewer ? `<small class="reviewer">${esc(candidate.reviewer)} · ${esc(dateLabel(candidate.reviewed_at))}</small>`:''}</td><td>${candidate.status === 'pending' ? `<div class="ops-review-buttons"><button class="secondary-button" data-review="approved" data-version="${esc(candidate.version)}">Approuver</button><button class="text-button" data-review="rejected" data-version="${esc(candidate.version)}">Refuser</button></div>`:'Décision enregistrée'}</td></tr>`).join('') : '<tr><td colspan="4" class="table-empty">Utilisez DOCKER.cmd pour préparer les images de démonstration.</td></tr>';
+  $$('[data-review]').forEach(button => button.addEventListener('click', async () => {
+    try {
+      await opsPost(`/api/ops/releases/${encodeURIComponent(button.dataset.version)}/review`, {...operatorBody(), decision:button.dataset.review, agent_card_reviewed:$('#ops-card-reviewed').checked});
+      await refreshOperations(); toast('Décision enregistrée pour cette image exacte.');
+    } catch (error) { toast(error.message); }
+  }));
+  const actionLabels = {kill_switch_on:'Arrêt d’urgence activé', kill_switch_off:'Analyses réautorisées', tasks_cancelled:'Tâches interrompues', incident_changed:'Scénario de démo modifié', release_approved:'Version approuvée', release_rejected:'Version refusée', database_backup:'Sauvegarde SQLite'};
+  const interventions = ops.audit.map(event => ({at:event.created_at, actor:event.actor, title:actionLabels[event.action] || event.action, detail:JSON.stringify(event.details)}));
+  const deployments = ops.releases.deployments.map(event => ({at:event.at, actor:event.operator, title:event.kind === 'rollback' ? 'Rollback réalisé':event.kind === 'bootstrap' ? 'Installation initiale':'Version déployée', detail:`v${event.version} · ${event.image_id.slice(0,23)}…`}));
+  const logs = [...interventions,...deployments].sort((a,b) => b.at.localeCompare(a.at));
+  $('#ops-audit').innerHTML = logs.length ? logs.slice(0,60).map(event => `<div class="ops-audit-row"><span>${esc(dateLabel(event.at))}</span><div><strong>${esc(event.title)}</strong><p>${esc(event.detail)}</p></div><small>${esc(event.actor)}</small></div>`).join('') : '<div class="empty-state">Aucune intervention enregistrée.</div>';
+}
+
+async function setPause(paused) {
+  try {
+    const result = await opsPost('/api/ops/pause', {...operatorBody(), paused});
+    await refreshOperations();
+    toast(paused ? `Arrêt actif · ${result.cancelled.length} mission(s) interrompue(s).`:'Les analyses sont à nouveau autorisées.');
+  } catch (error) { toast(error.message); }
+}
+$('#ops-stop').addEventListener('click', () => setPause(true));
+$('#ops-resume').addEventListener('click', () => setPause(false));
+$('#ops-refresh').addEventListener('click', () => refreshOperations().catch(error => toast(error.message)));
+$('#ops-apply-incident').addEventListener('click', async () => {
+  try { await opsPost('/api/ops/incident', {...operatorBody(),incident:$('#ops-incident').value}); await refreshOperations(); toast('Scénario appliqué aux prochaines missions de démonstration.'); }
+  catch (error) { toast(error.message); }
+});
+$('#ops-test-incident').addEventListener('click', async () => {
+  try {
+    if (state.run?.status === 'running') throw new Error('Terminez la mission active ou interrompez-la avant de commencer.');
+    await opsPost('/api/ops/incident', {...operatorBody(),incident:$('#ops-incident').value});
+    const result = await opsPost('/api/runs', {profile:example, mode:'demo', scenario:'normal'});
+    await openRun(result.id); changeView('orientation');
+  } catch (error) { toast(error.message); }
+});
 
 async function boot() {
   try {
     const health = await api('/api/health');
     $('#connection-dot').classList.add('online');
     $('#connection-label').textContent = health.configured ? 'Équipe connectée' : 'Mode démo disponible';
+    $('#app-version').textContent = `v${health.version}`;
+    $('#ops-actor').value = localStorage.getItem('capavenir-operator') || '';
     $('#slow-rule').textContent = `> ${health.slow_seconds} s`;
     $('#budget-rule').textContent = `> $${health.budget_usd.toFixed(2)}`;
     if (!health.configured) { $('#run-mode').value = 'demo'; $('#scenario-row').classList.remove('hidden'); }
@@ -467,7 +541,7 @@ async function boot() {
     if (lastRun) {
       try { await openRun(lastRun); } catch { localStorage.removeItem('capavenir-last-run'); }
     }
-    if (window.location.hash === '#supervision') changeView('supervision');
+    if (['#supervision','#operations'].includes(window.location.hash)) changeView(window.location.hash.slice(1));
   } catch (error) {
     $('#connection-label').textContent = 'Serveur indisponible';
     toast(error.message);
