@@ -120,8 +120,9 @@ def rehearse(stable_image, incident_image):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--stable", default="cap-avenir:1.1.0")
-    parser.add_argument("--incident", default="cap-avenir:1.1.1-incident.1")
+    stable, incident = manager.demo_versions()
+    parser.add_argument("--stable", default="cap-avenir:" + stable)
+    parser.add_argument("--incident", default="cap-avenir:" + incident)
     parser.add_argument("--output", default="livrables/exercice-docker.json")
     args = parser.parse_args()
     destination = Path(args.output)

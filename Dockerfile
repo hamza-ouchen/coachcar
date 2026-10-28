@@ -4,7 +4,7 @@ ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 PYTHONUTF8=1
 COPY requirements.txt .
 RUN python -m pip install --no-cache-dir -r requirements.txt
 COPY . .
-ARG APP_VERSION=1.1.0
+ARG APP_VERSION=1.1.1
 ARG APP_COMMIT=local
 ARG DEMO_FAULT=0
 LABEL org.opencontainers.image.title="Cap Avenir" \

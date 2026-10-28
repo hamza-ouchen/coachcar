@@ -4,7 +4,7 @@ cd /d "%~dp0"
 title Cap Avenir - Retour a la version precedente
 ".venv\Scripts\python.exe" scripts/release_manager.py rollback
 if errorlevel 1 goto :error
-start "" "http://127.0.0.1:8080/#operations"
+start "" "http://127.0.0.1:8787/#operations"
 echo Version precedente restauree. Verifiez le service avant de reautoriser les analyses.
 pause
 exit /b 0

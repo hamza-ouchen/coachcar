@@ -1,6 +1,6 @@
 # Agent Card — Cap Avenir
 
-Version fonctionnelle : 1.1.0. Projet pédagogique local. Responsable : propriétaire du dépôt hamza-ouchen/coachcar. Dernière mise à jour : 28 octobre 2026.
+Version fonctionnelle : 1.1.1. Projet pédagogique local. Responsable : propriétaire du dépôt hamza-ouchen/coachcar. Dernière mise à jour : 28 octobre 2026.
 
 ## Identité, rôles et interfaces
 

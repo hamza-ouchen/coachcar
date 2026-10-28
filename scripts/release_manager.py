@@ -20,6 +20,12 @@ sys.path.insert(0, str(ROOT))
 import release_registry as registry
 
 
+def demo_versions():
+    stable = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
+    major, minor, patch = stable.split(".")
+    return stable, f"{major}.{minor}.{int(patch) + 1}-incident.1"
+
+
 def docker(*arguments, capture=True, check=True):
     result = subprocess.run(["docker", *arguments], cwd=ROOT, text=True, encoding="utf-8", errors="replace",
                             stdout=subprocess.PIPE if capture else None, stderr=subprocess.PIPE if capture else None)
@@ -60,7 +66,7 @@ def prepare(version, fault=False, image=None):
 def settings():
     runtime = registry.runtime_dir()
     data = Path(os.getenv("CAP_AVENIR_DATA_DIR", str(ROOT / "data"))).resolve()
-    port = int(os.getenv("CAP_AVENIR_PORT", "8080"))
+    port = int(os.getenv("CAP_AVENIR_PORT", "8787"))
     return {"runtime": runtime, "data": data, "port": port,
             "name": os.getenv("CAP_AVENIR_CONTAINER", "cap-avenir-demo"),
             "owner": hashlib.sha256(str(runtime).encode()).hexdigest()[:16],
@@ -184,11 +190,13 @@ def main():
     if args.command == "prepare":
         result = prepare(args.version or input("Version SemVer : ").strip(), args.fault, args.image)
     elif args.command == "prepare-demo":
-        result = {"stable": prepare("1.1.0"), "incident": prepare("1.1.1-incident.1", True)}
+        stable, incident = demo_versions()
+        result = {"stable": prepare(stable), "incident": prepare(incident, True)}
     elif args.command == "bootstrap":
-        result = deploy(args.version or "1.1.0", args.actor, bootstrap=True)
+        result = deploy(args.version or demo_versions()[0], args.actor, bootstrap=True)
     elif args.command == "deploy":
-        result = deploy(args.version or input("Version approuvée à déployer [1.1.1-incident.1] : ").strip() or "1.1.1-incident.1", args.actor)
+        default = demo_versions()[1]
+        result = deploy(args.version or input(f"Version approuvée à déployer [{default}] : ").strip() or default, args.actor)
     elif args.command == "rollback":
         result = rollback(args.actor)
     elif args.command == "stop":

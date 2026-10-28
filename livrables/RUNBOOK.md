@@ -2,22 +2,22 @@
 
 ## Préparation
 
-Docker Desktop doit être démarré. Sur la machine préparée, double-cliquer DOCKER.cmd : les images stables et d'incident sont construites si nécessaire, puis l'installation initiale stable est lancée sur http://127.0.0.1:8080 . Une version enregistrée n'est pas reconstruite silencieusement : changer la version pour changer son image.
+Docker Desktop doit être démarré. Sur la machine préparée, double-cliquer DOCKER.cmd : les images stables et d'incident sont construites si nécessaire, puis l'installation initiale stable est lancée sur http://127.0.0.1:8787 . Une version enregistrée n'est pas reconstruite silencieusement : changer la version pour changer son image.
 
 Le gestionnaire utilise un seul conteneur nommé cap-avenir-demo, les dossiers data/ et runtime/ montés depuis l'hôte, et une seule instance de serveur. Ne pas lancer en parallèle une autre application utilisant la même base. Aucun script ne supprime les données. Le conteneur est exposé uniquement sur l'interface locale. Docker Desktop permet de voir le conteneur et l'image utilisés.
 
-Versions de démonstration : 1.1.0 stable ; 1.1.1-incident.1 préversion dédiée à une panne démo. Cette dernière utilise le même code fonctionnel avec un paramètre d'image qui force l'échec du chercheur Reconversion en mode démonstration. Les analyses réelles ne reçoivent pas cette panne.
+Versions de démonstration : 1.1.1 stable ; 1.1.2-incident.1 préversion dédiée à une panne démo. Cette dernière utilise le même code fonctionnel avec un paramètre d'image qui force l'échec du chercheur Reconversion en mode démonstration. Les analyses réelles ne reçoivent pas cette panne.
 
 ## Présentation en classe, 8 à 10 minutes
 
-1. Ouvrir Exploitation, montrer v1.1.0, indiquer son nom pour le journal et réaliser une mission normale en démonstration.
+1. Ouvrir Exploitation, montrer v1.1.1, indiquer son nom pour le journal et réaliser une mission normale en démonstration.
 2. Montrer les tests GitHub Actions et les réponses remplacées dans test_workflow.py.
-3. Avant approbation, DEPLOYER.cmd avec 1.1.1-incident.1 doit refuser le déploiement. Le service stable ne doit pas changer.
+3. Avant approbation, DEPLOYER.cmd avec 1.1.2-incident.1 doit refuser le déploiement. Le service stable ne doit pas changer.
 4. Dans Exploitation, lire la candidate, son ID d'image et l'Agent Card. Cocher la confirmation de lecture puis cliquer Approuver. Le nom saisi, l'image, l'horodatage et la revue déclarée de la fiche sont enregistrés. Ne pas confondre cette validation locale avec un contrôle GitHub d'identité.
 5. Relancer DEPLOYER.cmd avec la candidate approuvée. Le gestionnaire active la pause, sauvegarde SQLite, remplace le conteneur par l'image exacte approuvée et vérifie /api/health. Le service reste en pause.
 6. Vérifier la version affichée, puis cliquer Réautoriser les analyses. Lancer une mission démo : Reconversion échoue et le résultat est partiel ; montrer l'alerte et le correlation_id.
 7. Lancer une seconde mission démo. Pendant les premières secondes, ouvrir Exploitation et activer l'arrêt d'urgence. Vérifier que les tâches s'annulent et qu'une nouvelle demande est refusée. Le superviseur ne doit pas démarrer pour la mission annulée.
-8. Exécuter ROLLBACK.cmd. Le gestionnaire sauvegarde les données et relance l'image précédente. La version doit redevenir 1.1.0 ; la pause et les missions précédentes restent présentes.
+8. Exécuter ROLLBACK.cmd. Le gestionnaire sauvegarde les données et relance l'image précédente. La version doit redevenir 1.1.1 ; la pause et les missions précédentes restent présentes.
 9. Réautoriser les analyses après vérification, lancer une mission normale et constater sa réussite.
 10. Exporter le journal JSON et montrer l'Agent Card, les tags Git SemVer et les sauvegardes dans data/backups/.
 

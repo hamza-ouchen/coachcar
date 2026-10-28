@@ -4,7 +4,7 @@ Plateforme locale d'orientation professionnelle avec trois agents LangGraph, rec
 
 ## Exploitation, Docker et gestion des versions
 
-Le plan détaillé est dans INTEGRATION-EXPLOITATION.md. Docker Desktop doit être démarré. Après la configuration initiale, **DOCKER.cmd** prépare les deux images de présentation et ouvre **http://127.0.0.1:8080/#operations**. L'installation initiale de la version stable est identifiée comme bootstrap, sans être présentée comme une revue humaine.
+Le plan détaillé est dans INTEGRATION-EXPLOITATION.md. Docker Desktop doit être démarré. Après la configuration initiale, **DOCKER.cmd** prépare les deux images de présentation et ouvre **http://127.0.0.1:8787/#operations**. L'installation initiale de la version stable est identifiée comme bootstrap, sans être présentée comme une revue humaine.
 
 L'onglet **Exploitation** affiche la version et propose : arrêt d'urgence persistant, reprise explicite, incidents simulés en mode démo uniquement, approbation/refus des images candidates et journal exportable. Entrer son nom avant une intervention. Le nom est déclaratif pour le TP local ; il ne remplace pas une authentification de production.
 
@@ -12,7 +12,7 @@ Une nouvelle version doit être approuvée dans cet onglet avant **DEPLOYER.cmd*
 
 **EXERCICE.cmd** teste ces procédures dans des conteneurs et dossiers temporaires, sans clé API. L'approbation de cet exercice est simulée et explicitement identifiée comme telle. Le rapport est livrables/exercice-docker.json. Procédure de présentation et d'urgence : livrables/RUNBOOK.md ; fiche des agents : livrables/AGENT_CARD.md.
 
-Images de présentation : `cap-avenir:1.1.0` stable et `cap-avenir:1.1.1-incident.1` avec panne forcée en démonstration. La deuxième image sert uniquement à l'exercice. Les données et le registre de versions sont montés depuis data/ et runtime/ et ne sont pas intégrés à l'image. L'exposition réseau reste sur l'adresse locale.
+Images de présentation : `cap-avenir:1.1.1` stable et `cap-avenir:1.1.2-incident.1` avec panne forcée en démonstration. La deuxième image sert uniquement à l'exercice. Les données et le registre de versions sont montés depuis data/ et runtime/ et ne sont pas intégrés à l'image. L'exposition réseau reste sur l'adresse locale.
 
 La CI exécute aussi l'exercice Docker avant la livraison de l'archive. Le workflow **Publication approuvee**, lancé manuellement dans GitHub Actions, vérifie l'environnement protégé `production`, teste une image et attend l'approbation humaine avant de publier exactement cette image dans GHCR. La protection requise est contrôlée : la publication est refusée si aucun approbateur obligatoire n'est configuré. Le déploiement sur la machine reste une action locale explicite.
 
@@ -31,7 +31,7 @@ La configuration locale est déjà réalisée sur la machine de développement. 
 Lancement manuel facultatif :
 
 ```powershell
-.\.venv\Scripts\python.exe -m uvicorn app:app --host 127.0.0.1 --port 8000
+.\.venv\Scripts\python.exe -m uvicorn app:app --host 127.0.0.1 --port 8790
 ```
 
 ## Parcours utilisateur

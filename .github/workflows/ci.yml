@@ -60,7 +60,7 @@ jobs:
       - name: Construire la version stable
         run: docker build -t cap-avenir:ci --build-arg APP_VERSION="$(cat VERSION)" .
       - name: Construire la version d'incident controle
-        run: docker build -t cap-avenir:ci-incident --build-arg APP_VERSION=1.1.1-incident.1 --build-arg DEMO_FAULT=1 .
+        run: docker build -t cap-avenir:ci-incident --build-arg APP_VERSION=1.1.2-incident.1 --build-arg DEMO_FAULT=1 .
       - name: Tester approbation, incident, arret et rollback dans Docker
         run: python scripts/rehearse.py --stable cap-avenir:ci --incident cap-avenir:ci-incident --output ci-output/exercice-docker.json
       - uses: actions/upload-artifact@v7

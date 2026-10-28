@@ -9,12 +9,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 os.chdir(ROOT)
-URL = "http://127.0.0.1:8000"
+URL = "http://127.0.0.1:8790"
 
 
 def already_running():
     # Prefer the managed Docker service when it is already available.
-    for address in ["http://127.0.0.1:8080", URL]:
+    for address in ["http://127.0.0.1:8787", URL]:
         try:
             with urllib.request.urlopen(address + "/api/health", timeout=2) as response:
                 if json.load(response).get("application") == "cap-avenir":
@@ -33,4 +33,4 @@ if __name__ == "__main__":
         print("Cap Avenir : " + URL)
         print("Gardez cette fenetre ouverte pendant la presentation. Ctrl+C pour arreter.")
         threading.Timer(2, lambda: webbrowser.open(URL)).start()
-        uvicorn.run("app:app", host="127.0.0.1", port=8000)
+        uvicorn.run("app:app", host="127.0.0.1", port=8790)

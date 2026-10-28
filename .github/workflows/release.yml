@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version stable du fichier VERSION (ex. 1.1.0)"
+        description: "Version stable du fichier VERSION (ex. 1.1.1)"
         required: true
-        default: "1.1.0"
+        default: "1.1.1"
         type: string
 
 permissions:
@@ -50,7 +50,7 @@ jobs:
           RELEASE_COMMIT: ${{ github.sha }}
         run: docker build --build-arg APP_VERSION="$RELEASE_VERSION" --build-arg APP_COMMIT="$RELEASE_COMMIT" -t cap-avenir:release .
       - name: Construire l'image de panne pour l'exercice
-        run: docker build --build-arg APP_VERSION=1.1.1-incident.1 --build-arg DEMO_FAULT=1 -t cap-avenir:release-incident .
+        run: docker build --build-arg APP_VERSION=1.1.2-incident.1 --build-arg DEMO_FAULT=1 -t cap-avenir:release-incident .
       - name: Valider les procedures avec les vrais conteneurs
         run: python scripts/rehearse.py --stable cap-avenir:release --incident cap-avenir:release-incident --output ci-output/exercice-release.json
       - name: Conserver exactement l'image testee pour l'approbation
