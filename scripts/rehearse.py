@@ -124,8 +124,13 @@ if __name__ == "__main__":
     parser.add_argument("--incident", default="cap-avenir:1.1.1-incident.1")
     parser.add_argument("--output", default="livrables/exercice-docker.json")
     args = parser.parse_args()
-    result = rehearse(args.stable, args.incident)
     destination = Path(args.output)
     destination.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        result = rehearse(args.stable, args.incident)
+    except Exception:
+        import traceback
+        destination.write_text(json.dumps({"passed": False, "api_calls": False, "error": traceback.format_exc()}, indent=2), encoding="utf-8")
+        raise
     destination.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps({"passed": result["passed"], "checks": len(result["checks"]), "report": str(destination), "api_calls": False}))

@@ -95,6 +95,10 @@ def start_image(candidate, config):
             "--mount", f"type=bind,source={config['data']},target=/app/data",
             "--mount", f"type=bind,source={config['runtime']},target=/app/runtime",
             "--env", "CAP_AVENIR_RUNTIME_DIR=/app/runtime", "--env", "CAP_AVENIR_DB=/app/data/cap_avenir.db"]
+    # On Linux, keep bind-mounted files owned by the operator/CI runner.
+    # Otherwise root-owned backup directories cannot be cleaned up by the runner.
+    if hasattr(os, "getuid") and os.getuid() != 0:
+        args += ["--user", f"{os.getuid()}:{os.getgid()}", "--env", "HOME=/tmp"]
     secret_file = ROOT / ".env"
     if os.getenv("CAP_AVENIR_WITH_SECRETS", "1") == "1" and secret_file.exists():
         args += ["--env-file", str(secret_file)]
