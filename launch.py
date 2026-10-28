@@ -13,16 +13,21 @@ URL = "http://127.0.0.1:8000"
 
 
 def already_running():
-    try:
-        with urllib.request.urlopen(URL + "/api/health", timeout=2) as response:
-            return json.load(response).get("application") == "cap-avenir"
-    except (OSError, ValueError, urllib.error.URLError):
-        return False
+    # Prefer the managed Docker service when it is already available.
+    for address in ["http://127.0.0.1:8080", URL]:
+        try:
+            with urllib.request.urlopen(address + "/api/health", timeout=2) as response:
+                if json.load(response).get("application") == "cap-avenir":
+                    return address
+        except (OSError, ValueError, urllib.error.URLError):
+            pass
+    return None
 
 
 if __name__ == "__main__":
-    if already_running():
-        webbrowser.open(URL)
+    running_address = already_running()
+    if running_address:
+        webbrowser.open(running_address)
     else:
         import uvicorn
         print("Cap Avenir : " + URL)
