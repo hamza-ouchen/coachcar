@@ -96,7 +96,7 @@ def remove_owned(config):
 def start_image(candidate, config):
     config["data"].mkdir(parents=True, exist_ok=True)
     config["runtime"].mkdir(parents=True, exist_ok=True)
-    args = ["run", "-d", "--name", config["name"], "--label", "com.cap-avenir.owner=" + config["owner"],
+    args = ["run", "-d", "--restart", "unless-stopped", "--name", config["name"], "--label", "com.cap-avenir.owner=" + config["owner"],
             "--publish", f"127.0.0.1:{config['port']}:8000",
             "--mount", f"type=bind,source={config['data']},target=/app/data",
             "--mount", f"type=bind,source={config['runtime']},target=/app/runtime",
@@ -179,9 +179,31 @@ def rollback(actor):
     return deploy(previous["version"], actor, rollback=True)
 
 
+def restart_existing(actor):
+    config = settings()
+    current = current_deployment()
+    if not current:
+        raise ValueError("Aucune installation existante à relancer.")
+    found = docker("container", "inspect", config["name"], check=False)
+    if found.returncode == 0:
+        container = json.loads(found.stdout)[0]
+        if (container["Config"].get("Labels") or {}).get("com.cap-avenir.owner") != config["owner"]:
+            raise ValueError("Ce conteneur n'appartient pas à cette installation.")
+        if container["State"]["Running"]:
+            response = httpx.get(config["url"] + "/api/health", timeout=5)
+            response.raise_for_status()
+            if response.json()["version"] != current["version"]:
+                raise ValueError("La version active ne correspond pas au registre de déploiement.")
+            return {"version": current["version"], "url": config["url"], "already_running": True}
+    remove_owned(config)
+    health = start_image(current, config)
+    registry.record_deployment(current["version"], current["image"], current["image_id"], actor, "restart")
+    return {"version": current["version"], "url": config["url"], "paused": health["paused"]}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["prepare", "bootstrap", "deploy", "rollback", "prepare-demo", "status", "stop"])
+    parser.add_argument("command", choices=["prepare", "bootstrap", "deploy", "rollback", "prepare-demo", "status", "stop", "start"])
     parser.add_argument("--version")
     parser.add_argument("--image")
     parser.add_argument("--fault", action="store_true")
@@ -199,6 +221,8 @@ def main():
         result = deploy(args.version or input(f"Version approuvée à déployer [{default}] : ").strip() or default, args.actor)
     elif args.command == "rollback":
         result = rollback(args.actor)
+    elif args.command == "start":
+        result = restart_existing(args.actor)
     elif args.command == "stop":
         remove_owned(settings())
         result = {"stopped": True, "data_preserved": True}

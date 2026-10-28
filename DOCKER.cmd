@@ -7,6 +7,9 @@ if errorlevel 1 goto :error
 if not exist "runtime\deployment.json" (
     ".venv\Scripts\python.exe" scripts/release_manager.py bootstrap
     if errorlevel 1 goto :error
+) else (
+    ".venv\Scripts\python.exe" scripts/release_manager.py start
+    if errorlevel 1 goto :error
 )
 start "" "http://127.0.0.1:8787/#operations"
 echo Les versions sont preparees. Approuvez une candidate dans Exploitation avant DEPLOYER.cmd.
